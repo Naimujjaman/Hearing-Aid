@@ -1,0 +1,329 @@
+classdef app2 < matlab.apps.AppBase
+
+% Properties that correspond to app components
+properties (Access = public)
+UIFigure matlab.ui.Figure
+UIAxes matlab.ui.control.UIAxes
+UIAxes2 matlab.ui.control.UIAxes
+UIAxes3 matlab.ui.control.UIAxes
+UIAxes4 matlab.ui.control.UIAxes
+UIAxes5 matlab.ui.control.UIAxes
+RUNButton matlab.ui.control.Button
+Fst1EditFieldLabel matlab.ui.control.Label
+Fst1EditField matlab.ui.control.NumericEditField
+Fp1EditFieldLabel matlab.ui.control.Label
+Fp1EditField matlab.ui.control.NumericEditField
+Fp2EditFieldLabel matlab.ui.control.Label
+Fp2EditField matlab.ui.control.NumericEditField
+Fst2EditFieldLabel matlab.ui.control.Label
+Fst2EditField matlab.ui.control.NumericEditField
+Ast1EditFieldLabel matlab.ui.control.Label
+Ast1EditField matlab.ui.control.NumericEditField
+ApEditFieldLabel matlab.ui.control.Label
+ApEditField matlab.ui.control.NumericEditField
+Ast2EditFieldLabel matlab.ui.control.Label
+Ast2EditField matlab.ui.control.NumericEditField
+StateEditFieldLabel matlab.ui.control.Label
+StateEditField matlab.ui.control.EditField
+end
+
+methods (Access = private)
+function hearing_aid(app,Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2)%code declared as fuction
+app.StateEditField.Value=('input sound')%shows in state when input sound is playing
+load handel.mat
+fs=Fs;%imprting data got from handel.mat
+y = y(:, 1);%for 1 sec
+plot(app.UIAxes,y);%uiaxes shows the graph in matlab gui
+app.StateEditField.Value=('playing actual sound...')
+sound(y);
+pause(10)
+%% adding noise
+y = awgn(y,40);
+noi = y;
+plot(app.UIAxes2,y);
+app.StateEditField.Value=('playing added noise...');%shows in state bar in gui
+sound(y);%playing the sound
+pause(10)%pausing the sound in 10 sec
+%%denoising process
+%'Fp,Fst,Ap,Ast' (passband frequency, stopband frequency, passband ripple, stopband attenuation)
+hlpf = fdesign.lowpass('Fp,Fst,Ap,Ast',3.0e3,3.5e3,0.5,50,fs);%designing lowpass filter using buitin function
+D = design(hlpf);%lowpass filter
+%freqz(D);%needed if we want the spectrum of the filter
+x = filter(D,y);%filtering the noised signal
+app.StateEditField.Value=('playing denoised sound');%showed in state while playing the sound
+plot(app.UIAxes3,x);% plotting in the 3rd graph in gui
+sound(x,fs);%playing the denoised sound
+pause(10)%pause after 10 sec
+%% freq shaper using band pass of denoised signal
+T = 1/fs;%setting time
+len = length(x);
+p = log2(len);%level division denoised signal
+p = ceil(p);% making p an integer
+N = 2^p;% number of level
+%f1 = fdesign.bandpass('Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',2000,3000,4000,5000,60,2,60,2*fs);
+f1 = fdesign.bandpass(Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2,2*fs);%setting the values according to the requirement
+hd = design(f1,'equiripple');%bandpass function
+y = filter(hd,x);%denoised signal filtered by bandpass
+%freqz(hd);%filter frequency response if needed
+y = y*100;%amplification
+%%
+app.StateEditField.Value=('playing frequency shaped...');
+sound(y,fs);%playing the freq shaped sound
+pause(10);%pause after 10 sec
+%% amplitude shaper of denoised signal
+app.StateEditField.Value=('amplitude shaper')
+out1=fft(y);
+phse=angle(out1);%saving the phase values before amp shaping
+mag=abs(out1)/N;%magnitude of freq shaped signal
+[magsig,~]=size(mag);
+threshold=1000;
+out=zeros(magsig,1);
+for i=1:magsig/2
+if(mag(i)>threshold)
+mag(i)=threshold;mag(magsig-i)=threshold;
+end
+out(i)=mag(i)*exp(j*phse(i));%setting the magnitudes same as the previous position by multiplying exp phase
+out(magsig-i)=out(i);
+end
+%%
+outfinal=real(ifft(out))*10000;%taking only real value after ifft of the amp shaped signal
+app.StateEditField.Value=('playing amplitude shaped...');
+sound(outfinal,fs);%playing the finally edited sound
+pause(10);%pause after 10 sec
+load handel.mat
+%%code for spectrogram
+myAxe = app.UIAxes4;
+[S,F,T] = spectrogram(noi);
+imagesc(myAxe, F, T, log(abs(S))); %plot the log spectrum as image
+myAxe1 = app.UIAxes5;
+[S1,F1,T1] = spectrogram(outfinal);
+imagesc(myAxe1, F1, T1, log(abs(S1))); %plot the log spectrum as image
+app.StateEditField.Value=('Thank you');
+end
+end
+
+% Callbacks that handle component events
+methods (Access = private)
+
+% Button pushed function: RUNButton
+function RUNButtonPushed(app, event)
+Fst1=app.Fst1EditField.Value;
+Fp1=app.Fp1EditField.Value;
+Fp2=app.Fp2EditField.Value;
+Fst2=app.Fst2EditField.Value;
+Ast1=app.Ast1EditField.Value;
+Ap=app.ApEditField.Value;
+Ast2=app.Ast2EditField.Value;
+hearing_aid(app,Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2)
+%%code ends here
+end
+end
+
+% Component initialization
+methods (Access = private)
+
+% Create UIFigure and components
+function createComponents(app)
+
+% Create UIFigure and hide until all components are created
+app.UIFigure = uifigure('Visible', 'off');
+app.UIFigure.Color = [0.9294 0.6941 0.1255];
+app.UIFigure.Position = [100 100 1141 792];
+app.UIFigure.Name = 'MATLAB App';
+
+% Create UIAxes
+app.UIAxes = uiaxes(app.UIFigure);
+title(app.UIAxes, 'Input')
+xlabel(app.UIAxes, 'X')
+ylabel(app.UIAxes, 'Y')
+app.UIAxes.BackgroundColor = [1 1 0];
+app.UIAxes.Position = [15 571 300 185];
+
+% Create UIAxes2
+app.UIAxes2 = uiaxes(app.UIFigure);
+title(app.UIAxes2, 'Awgn')
+xlabel(app.UIAxes2, 'X')
+ylabel(app.UIAxes2, 'Y')
+app.UIAxes2.BackgroundColor = [1 1 0];
+app.UIAxes2.Position = [375 570 300 185];
+
+% Create UIAxes3
+app.UIAxes3 = uiaxes(app.UIFigure);
+title(app.UIAxes3, 'Denoise')
+xlabel(app.UIAxes3, 'X')
+ylabel(app.UIAxes3, 'Y')
+app.UIAxes3.BackgroundColor = [1 1 0];
+app.UIAxes3.Position = [733 572 300 185];
+
+% Create UIAxes4
+app.UIAxes4 = uiaxes(app.UIFigure);
+title(app.UIAxes4, 'Spectrogram of Original Signal')
+xlabel(app.UIAxes4, 'X')
+ylabel(app.UIAxes4, 'Y')
+app.UIAxes4.BackgroundColor = [1 1 0];
+app.UIAxes4.Position = [209 366 300 185];
+
+% Create UIAxes5
+app.UIAxes5 = uiaxes(app.UIFigure);
+title(app.UIAxes5, 'Spectrogram of Adjusted Signal')
+xlabel(app.UIAxes5, 'X')
+ylabel(app.UIAxes5, 'Y')
+app.UIAxes5.BackgroundColor = [1 1 0];
+app.UIAxes5.Position = [590 366 300 185];
+
+% Create RUNButton
+app.RUNButton = uibutton(app.UIFigure, 'push');
+app.RUNButton.ButtonPushedFcn = createCallbackFcn(app, @RUNButtonPushed, true);
+app.RUNButton.BackgroundColor = [1 1 0.0667];
+app.RUNButton.FontWeight = 'bold';
+app.RUNButton.Position = [509 262 99 22];
+app.RUNButton.Text = 'RUN';
+
+% Create Fst1EditFieldLabel
+app.Fst1EditFieldLabel = uilabel(app.UIFigure);
+app.Fst1EditFieldLabel.BackgroundColor = [0.9294 0.6941 0.1255];
+app.Fst1EditFieldLabel.HorizontalAlignment = 'right';
+app.Fst1EditFieldLabel.FontWeight = 'bold';
+app.Fst1EditFieldLabel.FontAngle = 'italic';
+app.Fst1EditFieldLabel.Position = [229 199 30 22];
+app.Fst1EditFieldLabel.Text = 'Fst1';
+
+% Create Fst1EditField
+app.Fst1EditField = uieditfield(app.UIFigure, 'numeric');
+app.Fst1EditField.FontWeight = 'bold';
+app.Fst1EditField.BackgroundColor = [1 1 0];
+app.Fst1EditField.Position = [194 170 100 22];
+
+% Create Fp1EditFieldLabel
+app.Fp1EditFieldLabel = uilabel(app.UIFigure);
+app.Fp1EditFieldLabel.BackgroundColor = [0.9294 0.6941 0.1255];
+app.Fp1EditFieldLabel.HorizontalAlignment = 'right';
+app.Fp1EditFieldLabel.FontWeight = 'bold';
+app.Fp1EditFieldLabel.FontAngle = 'italic';
+app.Fp1EditFieldLabel.Position = [544 199 27 22];
+app.Fp1EditFieldLabel.Text = 'Fp1';
+
+% Create Fp1EditField
+app.Fp1EditField = uieditfield(app.UIFigure, 'numeric');
+app.Fp1EditField.FontWeight = 'bold';
+app.Fp1EditField.BackgroundColor = [1 1 0];
+app.Fp1EditField.Position = [509 170 100 22];
+
+% Create Fp2EditFieldLabel
+app.Fp2EditFieldLabel = uilabel(app.UIFigure);
+app.Fp2EditFieldLabel.BackgroundColor = [0.9294 0.6941 0.1255];
+app.Fp2EditFieldLabel.HorizontalAlignment = 'right';
+app.Fp2EditFieldLabel.FontWeight = 'bold';
+app.Fp2EditFieldLabel.FontAngle = 'italic';
+app.Fp2EditFieldLabel.Position = [870 199 27 22];
+app.Fp2EditFieldLabel.Text = 'Fp2';
+
+% Create Fp2EditField
+app.Fp2EditField = uieditfield(app.UIFigure, 'numeric');
+app.Fp2EditField.FontWeight = 'bold';
+app.Fp2EditField.BackgroundColor = [1 1 0];
+app.Fp2EditField.Position = [833 170 99.9398166600239 22];
+
+% Create Fst2EditFieldLabel
+app.Fst2EditFieldLabel = uilabel(app.UIFigure);
+app.Fst2EditFieldLabel.BackgroundColor = [0.9294 0.6941 0.1255];
+app.Fst2EditFieldLabel.HorizontalAlignment = 'right';
+app.Fst2EditFieldLabel.FontWeight = 'bold';
+app.Fst2EditFieldLabel.FontAngle = 'italic';
+app.Fst2EditFieldLabel.Position = [229 127 30 22];
+app.Fst2EditFieldLabel.Text = 'Fst2';
+
+% Create Fst2EditField
+app.Fst2EditField = uieditfield(app.UIFigure, 'numeric');
+app.Fst2EditField.FontWeight = 'bold';
+app.Fst2EditField.BackgroundColor = [1 1 0];
+app.Fst2EditField.Position = [194 106 100 22];
+
+% Create Ast1EditFieldLabel
+app.Ast1EditFieldLabel = uilabel(app.UIFigure);
+app.Ast1EditFieldLabel.BackgroundColor = [0.9294 0.6941 0.1255];
+app.Ast1EditFieldLabel.HorizontalAlignment = 'right';
+app.Ast1EditFieldLabel.FontWeight = 'bold';
+app.Ast1EditFieldLabel.FontAngle = 'italic';
+app.Ast1EditFieldLabel.Position = [542 127 32 22];
+app.Ast1EditFieldLabel.Text = 'Ast1';
+
+% Create Ast1EditField
+app.Ast1EditField = uieditfield(app.UIFigure, 'numeric');
+app.Ast1EditField.FontWeight = 'bold';
+app.Ast1EditField.BackgroundColor = [1 1 0];
+app.Ast1EditField.Position = [509 106 100 22];
+
+% Create ApEditFieldLabel
+app.ApEditFieldLabel = uilabel(app.UIFigure);
+app.ApEditFieldLabel.BackgroundColor = [0.9294 0.6941 0.1255];
+app.ApEditFieldLabel.HorizontalAlignment = 'right';
+app.ApEditFieldLabel.FontWeight = 'bold';
+app.ApEditFieldLabel.FontAngle = 'italic';
+app.ApEditFieldLabel.Position = [871 127 25 22];
+app.ApEditFieldLabel.Text = 'Ap';
+
+% Create ApEditField
+app.ApEditField = uieditfield(app.UIFigure, 'numeric');
+app.ApEditField.FontWeight = 'bold';
+            app.ApEditField.BackgroundColor = [1 1 0];
+            app.ApEditField.Position = [834 106 99.9398166600239 22];
+
+            % Create Ast2EditFieldLabel
+            app.Ast2EditFieldLabel = uilabel(app.UIFigure);
+            app.Ast2EditFieldLabel.BackgroundColor = [0.9294 0.6941 0.1255];
+            app.Ast2EditFieldLabel.HorizontalAlignment = 'right';
+            app.Ast2EditFieldLabel.FontWeight = 'bold';
+            app.Ast2EditFieldLabel.Position = [541 56 32 22];
+            app.Ast2EditFieldLabel.Text = 'Ast2';
+
+            % Create Ast2EditField
+            app.Ast2EditField = uieditfield(app.UIFigure, 'numeric');
+            app.Ast2EditField.FontWeight = 'bold';
+            app.Ast2EditField.BackgroundColor = [1 1 0];
+            app.Ast2EditField.Position = [509 35 100 22];
+
+            % Create StateEditFieldLabel
+            app.StateEditFieldLabel = uilabel(app.UIFigure);
+            app.StateEditFieldLabel.BackgroundColor = [0.9294 0.6941 0.1255];
+            app.StateEditFieldLabel.HorizontalAlignment = 'right';
+            app.StateEditFieldLabel.FontWeight = 'bold';
+            app.StateEditFieldLabel.FontAngle = 'italic';
+            app.StateEditFieldLabel.Position = [419 317 35 22];
+            app.StateEditFieldLabel.Text = 'State';
+
+            % Create StateEditField
+            app.StateEditField = uieditfield(app.UIFigure, 'text');
+            app.StateEditField.BackgroundColor = [1 1 0];
+            app.StateEditField.Position = [469 317 224 22];
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = app2
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
